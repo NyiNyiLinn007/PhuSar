@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
@@ -7,12 +9,28 @@ from aiogram.types import CallbackQuery, Message
 
 from app.context import get_app
 from app.locales import t
+from app.utils import now_utc, text
 
 router = Router(name="admin")
 
 
 def _is_admin(admin_ids: set[int], user_id: int) -> bool:
     return user_id in admin_ids
+
+
+async def _apply_premium_days(user_id: int, days: int, actor_bot, app) -> None:
+    user = await app.users.get(user_id)
+    base = now_utc()
+    if user is not None and user["premium_until"] is not None and user["premium_until"] > base:
+        base = user["premium_until"]
+    premium_until = base + timedelta(days=days)
+    await app.users.set_premium_until(user_id, premium_until)
+
+    user_lang = (user["language"] if user else app.settings.default_language) or app.settings.default_language
+    try:
+        await actor_bot.send_message(user_id, t(user_lang, "premium_welcome"))
+    except TelegramAPIError:
+        pass
 
 
 @router.message(Command("ban"))
@@ -63,6 +81,119 @@ async def cmd_unban(message: Message) -> None:
     await message.answer(t(lang, "user_unbanned"))
 
 
+@router.message(Command("whereami"))
+async def cmd_whereami(message: Message) -> None:
+    if message.from_user is None:
+        return
+    app = get_app(message.bot)
+    lang = await app.users.get_language(message.from_user.id, app.settings.default_language)
+    if not _is_admin(app.settings.admin_ids, message.from_user.id):
+        await message.answer(t(lang, "admin_only"))
+        return
+
+    user = await app.users.get(message.from_user.id)
+    if user is None:
+        await message.answer("/start")
+        return
+
+    region = text(user["location_region"] or "-")
+    township = text(user["township"] or "-")
+    lat = user["latitude"]
+    lon = user["longitude"]
+    if lat is None or lon is None:
+        await message.answer(t(lang, "whereami_empty", region=region, township=township))
+        return
+
+    await message.answer(
+        t(
+            lang,
+            "whereami_value",
+            lat=f"{float(lat):.6f}",
+            lon=f"{float(lon):.6f}",
+            region=region,
+            township=township,
+        )
+    )
+
+
+@router.message(Command("approve"))
+async def cmd_approve(message: Message) -> None:
+    if message.from_user is None:
+        return
+    app = get_app(message.bot)
+    lang = await app.users.get_language(message.from_user.id, app.settings.default_language)
+    if not _is_admin(app.settings.admin_ids, message.from_user.id):
+        await message.answer(t(lang, "admin_only"))
+        return
+    if not app.settings.premium_enabled:
+        await message.answer(t(lang, "premium_disabled"))
+        return
+
+    if message.text is None:
+        return
+    parts = message.text.split()
+    if len(parts) != 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.answer(t(lang, "admin_approve_usage"))
+        return
+
+    user_id = int(parts[1])
+    days = int(parts[2])
+    if days <= 0 or days > 365:
+        await message.answer(t(lang, "admin_approve_usage"))
+        return
+
+    pending = await app.premium_requests.resolve_latest_pending_for_user(
+        user_id=user_id,
+        status="approved",
+        reviewed_by=message.from_user.id,
+    )
+    if pending is None:
+        await message.answer(t(lang, "premium_no_pending"))
+        return
+
+    await _apply_premium_days(user_id=user_id, days=days, actor_bot=message.bot, app=app)
+    await message.answer(t(lang, "admin_premium_done", days=days))
+
+
+@router.message(Command("reject"))
+async def cmd_reject(message: Message) -> None:
+    if message.from_user is None:
+        return
+    app = get_app(message.bot)
+    lang = await app.users.get_language(message.from_user.id, app.settings.default_language)
+    if not _is_admin(app.settings.admin_ids, message.from_user.id):
+        await message.answer(t(lang, "admin_only"))
+        return
+    if not app.settings.premium_enabled:
+        await message.answer(t(lang, "premium_disabled"))
+        return
+
+    if message.text is None:
+        return
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer(t(lang, "admin_reject_usage"))
+        return
+
+    user_id = int(parts[1])
+    pending = await app.premium_requests.resolve_latest_pending_for_user(
+        user_id=user_id,
+        status="rejected",
+        reviewed_by=message.from_user.id,
+    )
+    if pending is None:
+        await message.answer(t(lang, "premium_no_pending"))
+        return
+
+    user = await app.users.get(user_id)
+    user_lang = (user["language"] if user else app.settings.default_language) or app.settings.default_language
+    try:
+        await message.bot.send_message(user_id, t(user_lang, "premium_rejected"))
+    except TelegramAPIError:
+        pass
+    await message.answer(t(lang, "admin_reject_done"))
+
+
 @router.callback_query(F.data.startswith("premium_decision:"))
 async def premium_decision(query: CallbackQuery) -> None:
     if query.data is None or query.from_user is None:
@@ -70,6 +201,9 @@ async def premium_decision(query: CallbackQuery) -> None:
     app = get_app(query.bot)
     if not _is_admin(app.settings.admin_ids, query.from_user.id):
         await query.answer(t(app.settings.default_language, "admin_only"), show_alert=True)
+        return
+    if not app.settings.premium_enabled:
+        await query.answer(t(app.settings.default_language, "premium_disabled"), show_alert=True)
         return
 
     parts = query.data.split(":")
@@ -95,17 +229,20 @@ async def premium_decision(query: CallbackQuery) -> None:
         return
 
     await app.premium_requests.set_status(request_id, decision, query.from_user.id)
-    approved = decision == "approved"
-    if approved:
-        await app.users.set_premium(int(request["user_id"]), True)
-
-    user = await app.users.get(int(request["user_id"]))
-    user_lang = (user["language"] if user else app.settings.default_language) or app.settings.default_language
-    notice_key = "premium_approved" if approved else "premium_rejected"
-    try:
-        await query.bot.send_message(int(request["user_id"]), t(user_lang, notice_key))
-    except TelegramAPIError:
-        pass
+    if decision == "approved":
+        await _apply_premium_days(
+            user_id=int(request["user_id"]),
+            days=int(request["duration_days"] or 7),
+            actor_bot=query.bot,
+            app=app,
+        )
+    else:
+        user = await app.users.get(int(request["user_id"]))
+        user_lang = (user["language"] if user else app.settings.default_language) or app.settings.default_language
+        try:
+            await query.bot.send_message(int(request["user_id"]), t(user_lang, "premium_rejected"))
+        except TelegramAPIError:
+            pass
 
     if query.message is not None:
         try:

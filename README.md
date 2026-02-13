@@ -1,4 +1,4 @@
-# Phu Sar (ဖူးစာ) Telegram Dating Bot
+# Phu Sar Telegram Dating Bot
 
 Production-ready starter for a Myanmar-focused Telegram dating bot built with `aiogram 3.x`, PostgreSQL, and Redis.
 
@@ -6,21 +6,27 @@ Production-ready starter for a Myanmar-focused Telegram dating bot built with `a
 
 - FSM registration flow:
   - Language selection (English / Unicode Burmese)
+  - Display name
   - Gender + seeking preferences
   - Region + township
   - Age, bio, photo upload validation
 - Discovery engine:
-  - Candidate filtering by seeking preference
-  - Actions: `Like`, `Pass`, `SuperLike`
+  - Candidate filtering by seeking preference + region priority
+  - Actions: `Like`, `Pass`
   - Mutual-like match notifications
-- Premium flow:
-  - KBZPay / WaveMoney screenshot upload
-  - Admin approval/rejection callbacks
+  - Unlimited likes for all users
 - Moderation:
   - In-app report button on each profile
   - Admin review and one-click ban workflow
 - Deployment:
   - Docker + `docker-compose` with PostgreSQL and Redis
+
+## Premium Module (Disabled by Default)
+
+Premium code is kept in the project but hidden by default.
+
+- Set `PREMIUM_ENABLED=false` to keep premium fully off.
+- Set `PREMIUM_ENABLED=true` to re-enable premium menus and flows.
 
 ## Project Structure
 
@@ -46,8 +52,14 @@ Copy `.env.example` to `.env` and update:
 BOT_TOKEN=...
 DATABASE_URL=postgresql://phusar:phusar@postgres:5432/phusar
 REDIS_URL=redis://redis:6379/0
-ADMIN_IDS=111111111,222222222
+ADMIN_IDS=111111111
 DEFAULT_LANGUAGE=en
+
+# Optional premium module (only used when PREMIUM_ENABLED=true)
+PREMIUM_ENABLED=false
+PAYMENT_PHONE=09XXXXXXXXX
+KBZPAY_QR_FILE_ID=
+WAVEMONEY_QR_FILE_ID=
 ```
 
 ## Run with Docker
@@ -70,4 +82,4 @@ python -m app.main
 - `/ban <user_id>`
 - `/unban <user_id>`
 
-Premium approvals and report moderation are handled with inline admin buttons.
+When premium is enabled, `/approve <user_id> <days>` and `/reject <user_id>` are also available.

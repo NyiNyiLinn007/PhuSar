@@ -11,7 +11,7 @@ from app.context import get_app
 from app.handlers.registration import begin_registration
 from app.keyboards import main_menu_keyboard, profile_keyboard
 from app.locales import gender_label, seeking_label, t
-from app.utils import is_profile_complete, text
+from app.utils import is_premium_active, is_profile_complete, text
 
 router = Router(name="start")
 
@@ -30,8 +30,12 @@ def _profile_text(lang: str, user: Mapping[str, object]) -> str:
 
 
 async def _show_home(message: Message, lang: str, is_premium: bool) -> None:
+    app = get_app(message.bot)
     await message.answer(t(lang, "welcome"))
-    await message.answer(t(lang, "menu_text"), reply_markup=main_menu_keyboard(lang, is_premium))
+    await message.answer(
+        t(lang, "menu_text"),
+        reply_markup=main_menu_keyboard(lang, is_premium, app.settings.premium_enabled),
+    )
 
 
 @router.message(CommandStart())
@@ -49,7 +53,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
         return
 
     if is_profile_complete(user):
-        await _show_home(message, lang, bool(user["is_premium"]))
+        await _show_home(message, lang, is_premium_active(user))
         return
 
     await begin_registration(message, state, lang)
@@ -65,7 +69,10 @@ async def cmd_menu(message: Message) -> None:
         await message.answer("/start")
         return
     lang = user["language"] or app.settings.default_language
-    await message.answer(t(lang, "menu_text"), reply_markup=main_menu_keyboard(lang, bool(user["is_premium"])))
+    await message.answer(
+        t(lang, "menu_text"),
+        reply_markup=main_menu_keyboard(lang, is_premium_active(user), app.settings.premium_enabled),
+    )
 
 
 @router.callback_query(F.data == "menu:profile")

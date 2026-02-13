@@ -1,47 +1,79 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-import asyncpg
+from sqlalchemy import text
+from sqlalchemy.engine import RowMapping
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
 class Database:
     def __init__(self, dsn: str) -> None:
-        self.dsn = dsn
-        self.pool: asyncpg.Pool | None = None
+        self.dsn = self._normalize_dsn(dsn)
+        self.engine: AsyncEngine | None = None
+        self._arg_pattern = re.compile(r"\$(\d+)")
+
+    @staticmethod
+    def _normalize_dsn(dsn: str) -> str:
+        value = dsn.strip()
+        if value.startswith("postgres://"):
+            value = f"postgresql://{value[len('postgres://'):]}"
+        if value.startswith("postgresql://"):
+            value = f"postgresql+asyncpg://{value[len('postgresql://'):]}"
+        return value
+
+    def _compile_query(self, query: str, args: tuple[object, ...]) -> tuple[str, dict[str, object]]:
+        sql = self._arg_pattern.sub(lambda match: f":p{match.group(1)}", query)
+        params = {f"p{index}": value for index, value in enumerate(args, start=1)}
+        return sql, params
 
     async def connect(self) -> None:
-        self.pool = await asyncpg.create_pool(dsn=self.dsn, min_size=1, max_size=10)
+        self.engine = create_async_engine(
+            self.dsn,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=10,
+        )
 
     async def close(self) -> None:
-        if self.pool is not None:
-            await self.pool.close()
-            self.pool = None
+        if self.engine is not None:
+            await self.engine.dispose()
+            self.engine = None
 
     async def execute(self, query: str, *args: object) -> str:
-        if self.pool is None:
-            raise RuntimeError("Database pool is not initialized.")
-        async with self.pool.acquire() as conn:
-            return await conn.execute(query, *args)
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized.")
+        sql, params = self._compile_query(query, args)
+        async with self.engine.begin() as conn:
+            result = await conn.execute(text(sql), params)
+        affected = result.rowcount if result.rowcount is not None else 0
+        return f"OK {affected}"
 
-    async def fetch(self, query: str, *args: object) -> list[asyncpg.Record]:
-        if self.pool is None:
-            raise RuntimeError("Database pool is not initialized.")
-        async with self.pool.acquire() as conn:
-            return await conn.fetch(query, *args)
+    async def fetch(self, query: str, *args: object) -> list[RowMapping]:
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized.")
+        sql, params = self._compile_query(query, args)
+        async with self.engine.connect() as conn:
+            result = await conn.execute(text(sql), params)
+            rows = result.mappings().all()
+        return list(rows)
 
-    async def fetchrow(self, query: str, *args: object) -> asyncpg.Record | None:
-        if self.pool is None:
-            raise RuntimeError("Database pool is not initialized.")
-        async with self.pool.acquire() as conn:
-            return await conn.fetchrow(query, *args)
+    async def fetchrow(self, query: str, *args: object) -> RowMapping | None:
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized.")
+        sql, params = self._compile_query(query, args)
+        async with self.engine.connect() as conn:
+            result = await conn.execute(text(sql), params)
+            row = result.mappings().first()
+        return row
 
     async def init_schema(self) -> None:
-        if self.pool is None:
-            raise RuntimeError("Database pool is not initialized.")
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized.")
         schema_path = Path(__file__).resolve().parent.parent / "db" / "init.sql"
         sql = schema_path.read_text(encoding="utf-8")
         statements = [item.strip() for item in sql.split(";") if item.strip()]
-        async with self.pool.acquire() as conn:
+        async with self.engine.begin() as conn:
             for statement in statements:
-                await conn.execute(statement)
+                await conn.execute(text(statement))

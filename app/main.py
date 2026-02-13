@@ -12,7 +12,7 @@ from redis.asyncio import Redis
 from app.config import Settings
 from app.context import AppContext, set_app
 from app.db import Database
-from app.handlers import ROUTERS
+from app.handlers import get_routers
 from app.repositories import ActionRepository, PremiumRequestRepository, ReportRepository, UserRepository
 from app.services import DiscoveryService
 
@@ -49,7 +49,7 @@ async def run() -> None:
     )
     set_app(context)
 
-    for router in ROUTERS:
+    for router in get_routers(settings.premium_enabled):
         dp.include_router(router)
 
     try:
