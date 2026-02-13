@@ -180,7 +180,6 @@ class UserRepository:
         viewer_region: str | None,
         limit: int = 80,
     ) -> list[int]:
-        wanted_genders = ["male", "female"] if seeking == "both" else [seeking]
         query = """
             WITH pool AS (
                 SELECT
@@ -206,7 +205,10 @@ class UserRepository:
                     ON a.actor_id = $1 AND a.target_id = u.user_id
                 WHERE u.user_id != $1
                   AND u.is_banned = FALSE
-                  AND u.gender = ANY($2::text[])
+                  AND (
+                      ($2::text = 'both' AND u.gender IN ('male', 'female'))
+                      OR ($2::text IN ('male', 'female') AND u.gender = $2::text)
+                  )
                   AND (u.seeking = 'both' OR u.seeking = $3)
                   AND u.photo_id IS NOT NULL
                   AND u.age IS NOT NULL
@@ -230,7 +232,7 @@ class UserRepository:
         rows = await self.db.fetch(
             query,
             viewer_id,
-            wanted_genders,
+            seeking,
             viewer_gender,
             viewer_latitude,
             viewer_longitude,
@@ -247,7 +249,6 @@ class UserRepository:
         actor_region: str | None,
         limit: int = 100,
     ) -> list[int]:
-        viewer_genders = ["male", "female"] if actor_seeking == "both" else [actor_seeking]
         query = """
             SELECT u.user_id
             FROM users u
@@ -255,7 +256,10 @@ class UserRepository:
                 ON a.actor_id = u.user_id AND a.target_id = $1
             WHERE u.user_id != $1
               AND u.is_banned = FALSE
-              AND u.gender = ANY($2::text[])
+              AND (
+                  ($2::text = 'both' AND u.gender IN ('male', 'female'))
+                  OR ($2::text IN ('male', 'female') AND u.gender = $2::text)
+              )
               AND (u.seeking = 'both' OR u.seeking = $3)
               AND u.photo_id IS NOT NULL
               AND u.age IS NOT NULL
@@ -264,7 +268,7 @@ class UserRepository:
             ORDER BY u.created_at DESC
             LIMIT $5;
         """
-        rows = await self.db.fetch(query, actor_id, viewer_genders, actor_gender, actor_region, limit)
+        rows = await self.db.fetch(query, actor_id, actor_seeking, actor_gender, actor_region, limit)
         return [int(item["user_id"]) for item in rows]
 
 
