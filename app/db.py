@@ -27,12 +27,23 @@ class Database:
         query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
         cleaned_pairs: list[tuple[str, str]] = []
         connect_args: dict[str, object] = {}
+        unsupported_params = {
+            "channel_binding",
+            "gssencmode",
+        }
         has_ssl_param = any(key.lower() == "ssl" for key, _ in query_pairs)
         for key, val in query_pairs:
+            if key.lower() in unsupported_params:
+                # These libpq parameters are not accepted by asyncpg.
+                continue
             if key.lower() == "sslmode":
                 # asyncpg uses "ssl", not "sslmode"
                 if val and not has_ssl_param:
-                    connect_args["ssl"] = val
+                    sslmode = val.strip().lower()
+                    if sslmode == "disable":
+                        connect_args["ssl"] = False
+                    else:
+                        connect_args["ssl"] = True
                 continue
             cleaned_pairs.append((key, val))
 
