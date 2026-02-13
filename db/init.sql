@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     full_name VARCHAR(100),
+    username VARCHAR(64),
     language VARCHAR(5) DEFAULT 'en',
     age INTEGER CHECK (age >= 18 AND age <= 99),
     gender VARCHAR(10) CHECK (gender IN ('male', 'female')),
@@ -68,6 +69,8 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS username VARCHAR(64);
 ALTER TABLE premium_requests
     ADD COLUMN IF NOT EXISTS plan_code VARCHAR(20) DEFAULT 'weekly';
 ALTER TABLE premium_requests

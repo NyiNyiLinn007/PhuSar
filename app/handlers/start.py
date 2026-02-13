@@ -45,7 +45,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
     app = get_app(message.bot)
     full_name = message.from_user.full_name.strip()[:100] if message.from_user.full_name else "User"
-    user = await app.users.ensure_user(message.from_user.id, full_name)
+    user = await app.users.ensure_user(message.from_user.id, full_name, message.from_user.username)
     lang = user["language"] or app.settings.default_language
 
     if user["is_banned"]:
@@ -73,6 +73,25 @@ async def cmd_menu(message: Message) -> None:
         t(lang, "menu_text"),
         reply_markup=main_menu_keyboard(lang, is_premium_active(user), app.settings.premium_enabled),
     )
+
+
+@router.message(Command("delete_account"))
+async def cmd_delete_account(message: Message, state: FSMContext) -> None:
+    if message.from_user is None:
+        return
+
+    app = get_app(message.bot)
+    user = await app.users.get(message.from_user.id)
+    if user is None:
+        await message.answer("/start")
+        return
+
+    lang = user["language"] or app.settings.default_language
+    await state.clear()
+    await app.users.delete_account(message.from_user.id)
+    await app.discovery.clear_queue(message.from_user.id)
+    await app.redis.delete(f"rewind_last_dislike:{message.from_user.id}")
+    await message.answer(t(lang, "delete_account_done"))
 
 
 @router.callback_query(F.data == "menu:profile")

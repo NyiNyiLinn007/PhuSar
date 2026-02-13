@@ -6,7 +6,13 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from app.context import get_app
-from app.keyboards import admin_report_keyboard, discovery_keyboard, main_menu_keyboard, report_reason_keyboard
+from app.keyboards import (
+    admin_report_keyboard,
+    discovery_keyboard,
+    like_back_keyboard,
+    main_menu_keyboard,
+    report_reason_keyboard,
+)
 from app.locales import gender_label, report_reason_label, t
 from app.utils import distance_between_users_km, is_premium_active, is_profile_complete, text
 
@@ -27,6 +33,15 @@ def _candidate_caption(lang: str, profile: dict[str, object], distance_km: float
         f"{location_line}\n\n"
         f"{text(profile.get('bio') or '-')}"
     )
+
+
+def _username_mention(value: object) -> str | None:
+    if value is None:
+        return None
+    username = str(value).strip().lstrip("@")
+    if not username:
+        return None
+    return f"@{username}"
 
 
 async def _show_profile_card(
@@ -283,6 +298,27 @@ async def profile_action(query: CallbackQuery) -> None:
     except TelegramAPIError:
         pass
 
+    if action == "like" and actor is not None:
+        target_lang = target_user["language"] or app.settings.default_language
+        actor_payload = dict(actor)
+        target_payload = dict(target_user)
+        actor_photo_id = actor_payload.get("photo_id")
+        if actor_photo_id:
+            actor_caption = (
+                f"{t(target_lang, 'like_received')}\n\n"
+                f"{_candidate_caption(target_lang, actor_payload, distance_between_users_km(target_payload, actor_payload))}"
+            )
+            like_back_kb = like_back_keyboard(target_lang, actor_id)
+            try:
+                await query.bot.send_photo(
+                    chat_id=target_id,
+                    photo=actor_photo_id,  # type: ignore[arg-type]
+                    caption=actor_caption,
+                    reply_markup=like_back_kb,
+                )
+            except TelegramAPIError:
+                pass
+
     if action == "superlike":
         actor = actor or await app.users.get(actor_id)
         if actor is not None:
@@ -294,17 +330,29 @@ async def profile_action(query: CallbackQuery) -> None:
                 pass
 
     if action in {"like", "superlike"} and await app.actions.has_positive_action(target_id, actor_id):
-        actor = await app.users.get(actor_id)
+        actor = actor or await app.users.get(actor_id)
         target = target_user
         if actor and target:
             actor_lang = actor["language"] or app.settings.default_language
             target_lang = target["language"] or app.settings.default_language
-            actor_name = actor["full_name"] or "Someone"
-            target_name = target["full_name"] or "Someone"
 
-            await query.message.answer(t(actor_lang, "match", name=text(target_name)))
+            actor_username = _username_mention(actor["username"])
+            target_username = _username_mention(target["username"])
+
+            if target_username:
+                await query.message.answer(t(actor_lang, "match_username", username=text(target_username)))
+            else:
+                await query.message.answer(t(actor_lang, "match_no_username"))
+            if not actor_username:
+                await query.message.answer(t(actor_lang, "set_username_hint"))
+
             try:
-                await query.bot.send_message(target_id, t(target_lang, "match", name=text(actor_name)))
+                if actor_username:
+                    await query.bot.send_message(target_id, t(target_lang, "match_username", username=text(actor_username)))
+                else:
+                    await query.bot.send_message(target_id, t(target_lang, "match_no_username"))
+                if not target_username:
+                    await query.bot.send_message(target_id, t(target_lang, "set_username_hint"))
             except TelegramAPIError:
                 pass
 

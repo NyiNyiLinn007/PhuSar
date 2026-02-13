@@ -246,6 +246,7 @@ async def registration_photo(message: Message, state: FSMContext) -> None:
     await app.users.save_registration(
         user_id=message.from_user.id,
         full_name=data.get("full_name", message.from_user.full_name or "User"),
+        username=message.from_user.username,
         language=language,
         gender=data["gender"],
         seeking=data["seeking"],

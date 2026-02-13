@@ -13,16 +13,17 @@ from app.utils import now_utc
 class UserRepository:
     db: Database
 
-    async def ensure_user(self, user_id: int, full_name: str) -> asyncpg.Record:
+    async def ensure_user(self, user_id: int, full_name: str, username: str | None) -> asyncpg.Record:
         query = """
-            INSERT INTO users (user_id, full_name)
-            VALUES ($1, LEFT($2, 100))
+            INSERT INTO users (user_id, full_name, username)
+            VALUES ($1, LEFT($2, 100), LEFT(NULLIF($3, ''), 64))
             ON CONFLICT (user_id) DO UPDATE
             SET full_name = COALESCE(NULLIF(users.full_name, ''), LEFT(EXCLUDED.full_name, 100)),
+                username = LEFT(NULLIF(EXCLUDED.username, ''), 64),
                 updated_at = CURRENT_TIMESTAMP
             RETURNING *;
         """
-        return await self.db.fetchrow(query, user_id, full_name)  # type: ignore[return-value]
+        return await self.db.fetchrow(query, user_id, full_name, username)  # type: ignore[return-value]
 
     async def get(self, user_id: int) -> asyncpg.Record | None:
         return await self.db.fetchrow("SELECT * FROM users WHERE user_id = $1;", user_id)
@@ -38,6 +39,7 @@ class UserRepository:
         self,
         user_id: int,
         full_name: str,
+        username: str | None,
         language: str,
         gender: str,
         seeking: str,
@@ -51,15 +53,16 @@ class UserRepository:
     ) -> None:
         query = """
             INSERT INTO users (
-                user_id, full_name, language, gender, seeking,
+                user_id, full_name, username, language, gender, seeking,
                 location_region, township, age, bio, photo_id, latitude, longitude
             )
             VALUES (
-                $1, LEFT($2, 100), $3, $4, $5,
-                LEFT($6, 50), LEFT($7, 50), $8, LEFT($9, 500), $10, $11, $12
+                $1, LEFT($2, 100), LEFT(NULLIF($3, ''), 64), $4, $5, $6,
+                LEFT($7, 50), LEFT($8, 50), $9, LEFT($10, 500), $11, $12, $13
             )
             ON CONFLICT (user_id) DO UPDATE
             SET full_name = LEFT(EXCLUDED.full_name, 100),
+                username = LEFT(NULLIF(EXCLUDED.username, ''), 64),
                 language = EXCLUDED.language,
                 gender = EXCLUDED.gender,
                 seeking = EXCLUDED.seeking,
@@ -76,6 +79,7 @@ class UserRepository:
             query,
             user_id,
             full_name,
+            username,
             language,
             gender,
             seeking,
@@ -87,6 +91,17 @@ class UserRepository:
             latitude,
             longitude,
         )
+
+    async def delete_account(self, user_id: int) -> bool:
+        row = await self.db.fetchrow(
+            """
+            DELETE FROM users
+            WHERE user_id = $1
+            RETURNING user_id;
+            """,
+            user_id,
+        )
+        return row is not None
 
     async def set_language(self, user_id: int, language: str) -> None:
         await self.db.execute(

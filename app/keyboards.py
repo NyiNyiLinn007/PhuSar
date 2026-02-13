@@ -107,6 +107,18 @@ def discovery_keyboard(lang: str, target_id: int, premium_enabled: bool) -> Inli
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def like_back_keyboard(lang: str, target_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=t(lang, "btn_like_back"), callback_data=f"act:{target_id}:like"),
+                InlineKeyboardButton(text=t(lang, "btn_pass"), callback_data=f"act:{target_id}:dislike"),
+            ],
+            [InlineKeyboardButton(text=t(lang, "btn_report"), callback_data=f"report:{target_id}")],
+        ]
+    )
+
+
 def report_reason_keyboard(lang: str, target_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
