@@ -50,20 +50,27 @@ class UserRepository:
         longitude: float | None,
     ) -> None:
         query = """
-            UPDATE users
-            SET full_name = LEFT($2, 100),
-                language = $3,
-                gender = $4,
-                seeking = $5,
-                location_region = LEFT($6, 50),
-                township = LEFT($7, 50),
-                age = $8,
-                bio = LEFT($9, 500),
-                photo_id = $10,
-                latitude = $11,
-                longitude = $12,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $1;
+            INSERT INTO users (
+                user_id, full_name, language, gender, seeking,
+                location_region, township, age, bio, photo_id, latitude, longitude
+            )
+            VALUES (
+                $1, LEFT($2, 100), $3, $4, $5,
+                LEFT($6, 50), LEFT($7, 50), $8, LEFT($9, 500), $10, $11, $12
+            )
+            ON CONFLICT (user_id) DO UPDATE
+            SET full_name = LEFT(EXCLUDED.full_name, 100),
+                language = EXCLUDED.language,
+                gender = EXCLUDED.gender,
+                seeking = EXCLUDED.seeking,
+                location_region = LEFT(EXCLUDED.location_region, 50),
+                township = LEFT(EXCLUDED.township, 50),
+                age = EXCLUDED.age,
+                bio = LEFT(EXCLUDED.bio, 500),
+                photo_id = EXCLUDED.photo_id,
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude,
+                updated_at = CURRENT_TIMESTAMP;
         """
         await self.db.execute(
             query,

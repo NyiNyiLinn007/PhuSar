@@ -82,6 +82,7 @@ async def profile_menu(query: CallbackQuery) -> None:
     app = get_app(query.bot)
     user = await app.users.get(query.from_user.id)
     if user is None:
+        await query.message.answer("/start")
         await query.answer()
         return
     lang = user["language"] or app.settings.default_language

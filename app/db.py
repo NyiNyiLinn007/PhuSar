@@ -90,7 +90,7 @@ class Database:
         if self.engine is None:
             raise RuntimeError("Database engine is not initialized.")
         sql, params = self._compile_query(query, args)
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
             result = await conn.execute(text(sql), params)
             rows = result.mappings().all()
         return list(rows)
@@ -99,7 +99,7 @@ class Database:
         if self.engine is None:
             raise RuntimeError("Database engine is not initialized.")
         sql, params = self._compile_query(query, args)
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
             result = await conn.execute(text(sql), params)
             row = result.mappings().first()
         return row
