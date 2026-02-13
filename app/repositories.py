@@ -187,16 +187,16 @@ class UserRepository:
                     u.location_region,
                     u.created_at,
                     CASE
-                        WHEN $4::double precision IS NULL
-                             OR $5::double precision IS NULL
+                        WHEN CAST($4 AS double precision) IS NULL
+                             OR CAST($5 AS double precision) IS NULL
                              OR u.latitude IS NULL
                              OR u.longitude IS NULL
                             THEN NULL
                         ELSE 6371 * acos(
                             LEAST(1.0, GREATEST(-1.0,
-                                cos(radians($4::double precision)) * cos(radians(u.latitude))
-                                * cos(radians(u.longitude) - radians($5::double precision))
-                                + sin(radians($4::double precision)) * sin(radians(u.latitude))
+                                cos(radians(CAST($4 AS double precision))) * cos(radians(u.latitude))
+                                * cos(radians(u.longitude) - radians(CAST($5 AS double precision)))
+                                + sin(radians(CAST($4 AS double precision))) * sin(radians(u.latitude))
                             ))
                         )
                     END AS distance_km
@@ -206,8 +206,8 @@ class UserRepository:
                 WHERE u.user_id != $1
                   AND u.is_banned = FALSE
                   AND (
-                      ($2::text = 'both' AND u.gender IN ('male', 'female'))
-                      OR ($2::text IN ('male', 'female') AND u.gender = $2::text)
+                      (CAST($2 AS text) = 'both' AND u.gender IN ('male', 'female'))
+                      OR (CAST($2 AS text) IN ('male', 'female') AND u.gender = CAST($2 AS text))
                   )
                   AND (u.seeking = 'both' OR u.seeking = $3)
                   AND u.photo_id IS NOT NULL
@@ -257,14 +257,14 @@ class UserRepository:
             WHERE u.user_id != $1
               AND u.is_banned = FALSE
               AND (
-                  ($2::text = 'both' AND u.gender IN ('male', 'female'))
-                  OR ($2::text IN ('male', 'female') AND u.gender = $2::text)
+                  (CAST($2 AS text) = 'both' AND u.gender IN ('male', 'female'))
+                  OR (CAST($2 AS text) IN ('male', 'female') AND u.gender = CAST($2 AS text))
               )
               AND (u.seeking = 'both' OR u.seeking = $3)
               AND u.photo_id IS NOT NULL
               AND u.age IS NOT NULL
               AND a.target_id IS NULL
-              AND ($4::text IS NULL OR u.location_region = $4)
+              AND (CAST($4 AS text) IS NULL OR u.location_region = $4)
             ORDER BY u.created_at DESC
             LIMIT $5;
         """
@@ -316,7 +316,7 @@ class ActionRepository:
             FROM actions
             WHERE actor_id = $1
               AND action_type IN ('like', 'superlike')
-              AND created_at >= CURRENT_TIMESTAMP - ($2::text || ' hours')::interval;
+              AND created_at >= CURRENT_TIMESTAMP - (CAST($2 AS text) || ' hours')::interval;
             """,
             actor_id,
             hours,

@@ -14,6 +14,9 @@ class Database:
         self.dsn, self.connect_args = self._normalize_dsn(dsn)
         self.engine: AsyncEngine | None = None
         self._arg_pattern = re.compile(r"\$(\d+)")
+        self._cast_bind_pattern = re.compile(
+            r":p(\d+)::([a-zA-Z_][a-zA-Z0-9_]*(?:\[\])?(?:\s+[a-zA-Z_][a-zA-Z0-9_]*)*)"
+        )
 
     @staticmethod
     def _normalize_dsn(dsn: str) -> tuple[str, dict[str, object]]:
@@ -60,6 +63,12 @@ class Database:
 
     def _compile_query(self, query: str, args: tuple[object, ...]) -> tuple[str, dict[str, object]]:
         sql = self._arg_pattern.sub(lambda match: f":p{match.group(1)}", query)
+        # SQLAlchemy text() cannot always parse bind params followed by ::type.
+        # Rewrite to CAST(:pN AS type) so asyncpg gets valid compiled SQL.
+        sql = self._cast_bind_pattern.sub(
+            lambda match: f"CAST(:p{match.group(1)} AS {match.group(2)})",
+            sql,
+        )
         params = {f"p{index}": value for index, value in enumerate(args, start=1)}
         return sql, params
 
