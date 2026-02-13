@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
@@ -10,18 +11,41 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 class Database:
     def __init__(self, dsn: str) -> None:
-        self.dsn = self._normalize_dsn(dsn)
+        self.dsn, self.connect_args = self._normalize_dsn(dsn)
         self.engine: AsyncEngine | None = None
         self._arg_pattern = re.compile(r"\$(\d+)")
 
     @staticmethod
-    def _normalize_dsn(dsn: str) -> str:
+    def _normalize_dsn(dsn: str) -> tuple[str, dict[str, object]]:
         value = dsn.strip()
         if value.startswith("postgres://"):
             value = f"postgresql://{value[len('postgres://'):]}"
         if value.startswith("postgresql://"):
             value = f"postgresql+asyncpg://{value[len('postgresql://'):]}"
-        return value
+
+        parsed = urlsplit(value)
+        query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        cleaned_pairs: list[tuple[str, str]] = []
+        connect_args: dict[str, object] = {}
+        has_ssl_param = any(key.lower() == "ssl" for key, _ in query_pairs)
+        for key, val in query_pairs:
+            if key.lower() == "sslmode":
+                # asyncpg uses "ssl", not "sslmode"
+                if val and not has_ssl_param:
+                    connect_args["ssl"] = val
+                continue
+            cleaned_pairs.append((key, val))
+
+        normalized = urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(cleaned_pairs, doseq=True),
+                parsed.fragment,
+            )
+        )
+        return normalized, connect_args
 
     def _compile_query(self, query: str, args: tuple[object, ...]) -> tuple[str, dict[str, object]]:
         sql = self._arg_pattern.sub(lambda match: f":p{match.group(1)}", query)
@@ -34,6 +58,7 @@ class Database:
             pool_pre_ping=True,
             pool_size=10,
             max_overflow=10,
+            connect_args=self.connect_args,
         )
 
     async def close(self) -> None:
