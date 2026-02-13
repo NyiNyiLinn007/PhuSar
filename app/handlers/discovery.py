@@ -288,6 +288,10 @@ async def profile_action(query: CallbackQuery) -> None:
         await _send_next_profile(query.message, actor_id)
         return
 
+    previous_action = await app.actions.get_action_type(actor_id, target_id)
+    positive_actions = {"like", "superlike"}
+    became_positive = action in positive_actions and previous_action not in positive_actions
+
     await app.actions.save_action(actor_id, target_id, action)
     actor = await app.users.get(actor_id)
     if action == "dislike":
@@ -298,7 +302,7 @@ async def profile_action(query: CallbackQuery) -> None:
     except TelegramAPIError:
         pass
 
-    if action == "like" and actor is not None:
+    if action == "like" and became_positive and actor is not None:
         target_lang = target_user["language"] or app.settings.default_language
         actor_payload = dict(actor)
         target_payload = dict(target_user)
@@ -329,7 +333,7 @@ async def profile_action(query: CallbackQuery) -> None:
             except TelegramAPIError:
                 pass
 
-    if action in {"like", "superlike"} and await app.actions.has_positive_action(target_id, actor_id):
+    if became_positive and await app.actions.has_positive_action(target_id, actor_id):
         actor = actor or await app.users.get(actor_id)
         target = target_user
         if actor and target:

@@ -291,6 +291,24 @@ class UserRepository:
 class ActionRepository:
     db: Database
 
+    async def get_action_type(self, actor_id: int, target_id: int) -> str | None:
+        row = await self.db.fetchrow(
+            """
+            SELECT action_type
+            FROM actions
+            WHERE actor_id = $1
+              AND target_id = $2;
+            """,
+            actor_id,
+            target_id,
+        )
+        if row is None:
+            return None
+        action_type = row["action_type"]
+        if action_type is None:
+            return None
+        return str(action_type)
+
     async def save_action(self, actor_id: int, target_id: int, action_type: str) -> None:
         query = """
             INSERT INTO actions (actor_id, target_id, action_type)
