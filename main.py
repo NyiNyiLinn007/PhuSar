@@ -16,6 +16,7 @@ from app.config import Settings
 from app.context import AppContext, set_app
 from app.db import Database
 from app.handlers import get_routers
+from app.middlewares import ThrottlingMiddleware
 from app.repositories import ActionRepository, PremiumRequestRepository, ReportRepository, UserRepository
 from app.services import DiscoveryService
 
@@ -41,6 +42,9 @@ async def _build_runtime(settings: Settings) -> RuntimeResources:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=storage)
+    throttle = ThrottlingMiddleware(min_interval_seconds=1.0)
+    dp.message.outer_middleware(throttle)
+    dp.callback_query.outer_middleware(throttle)
 
     users = UserRepository(db)
     actions = ActionRepository(db)
@@ -103,7 +107,18 @@ async def _create_web_app() -> web.Application:
         raise ValueError("WEBHOOK_SECRET_TOKEN is required in webhook mode.")
 
     runtime = await _build_runtime(settings)
-    web_app = web.Application()
+    @web.middleware
+    async def webhook_secret_middleware(
+        request: web.Request,
+        handler,
+    ) -> web.StreamResponse:
+        if request.method == "POST" and request.path == settings.webhook_path:
+            provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if provided != settings.webhook_secret_token:
+                return web.Response(status=401, text="Unauthorized")
+        return await handler(request)
+
+    web_app = web.Application(middlewares=[webhook_secret_middleware])
     web_app["runtime"] = runtime
 
     SimpleRequestHandler(

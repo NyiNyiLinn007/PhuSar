@@ -22,6 +22,13 @@ class DiscoveryService:
     async def clear_queue(self, user_id: int) -> None:
         await self.redis.delete(self._queue_key(user_id))
 
+    async def purge_candidate_everywhere(self, candidate_id: int) -> None:
+        candidate = str(candidate_id)
+        async with self.redis.pipeline(transaction=False) as pipe:
+            async for key in self.redis.scan_iter(match="discover_queue:*", count=200):
+                pipe.lrem(key, 0, candidate)
+            await pipe.execute()
+
     async def push_candidates(self, viewer_id: int, candidate_ids: list[int], to_front: bool = False) -> None:
         if not candidate_ids:
             return

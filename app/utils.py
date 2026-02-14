@@ -27,8 +27,12 @@ def is_profile_complete(user: Mapping[str, Any]) -> bool:
     return True
 
 
-def text(value: object) -> str:
+def escape_html(value: object) -> str:
     return escape(str(value) if value is not None else "")
+
+
+def text(value: object) -> str:
+    return escape_html(value)
 
 
 def now_utc() -> datetime:

@@ -13,6 +13,7 @@ from app.config import Settings
 from app.context import AppContext, set_app
 from app.db import Database
 from app.handlers import get_routers
+from app.middlewares import ThrottlingMiddleware
 from app.repositories import ActionRepository, PremiumRequestRepository, ReportRepository, UserRepository
 from app.services import DiscoveryService
 
@@ -30,6 +31,9 @@ async def run() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=storage)
+    throttle = ThrottlingMiddleware(min_interval_seconds=1.0)
+    dp.message.outer_middleware(throttle)
+    dp.callback_query.outer_middleware(throttle)
 
     users = UserRepository(db)
     actions = ActionRepository(db)

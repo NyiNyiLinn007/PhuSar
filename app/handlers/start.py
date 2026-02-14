@@ -11,7 +11,7 @@ from app.context import get_app
 from app.handlers.registration import begin_registration
 from app.keyboards import main_menu_keyboard, profile_keyboard
 from app.locales import gender_label, seeking_label, t
-from app.utils import is_premium_active, is_profile_complete, text
+from app.utils import escape_html, is_premium_active, is_profile_complete, text
 
 router = Router(name="start")
 
@@ -19,13 +19,13 @@ router = Router(name="start")
 def _profile_text(lang: str, user: Mapping[str, object]) -> str:
     return (
         f"<b>{t(lang, 'profile_title')}</b>\n"
-        f"{text(user.get('full_name') or '-')}\n"
+        f"{escape_html(user.get('full_name') or '-')}\n"
         f"{t(lang, 'label_age')}: {text(user.get('age') or '-')}\n"
         f"{t(lang, 'label_gender')}: {text(gender_label(lang, str(user.get('gender') or '-')))}\n"
         f"{t(lang, 'label_seeking')}: {text(seeking_label(lang, str(user.get('seeking') or '-')))}\n"
         f"{t(lang, 'label_location')}: "
         f"{text(user.get('location_region') or '-')}, {text(user.get('township') or '-')}\n\n"
-        f"{text(user.get('bio') or '-')}"
+        f"{escape_html(user.get('bio') or '-')}"
     )
 
 

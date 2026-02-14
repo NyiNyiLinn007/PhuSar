@@ -52,6 +52,9 @@ async def cmd_ban(message: Message) -> None:
 
     target_id = int(parts[1])
     await app.users.set_banned(target_id, True)
+    await app.discovery.clear_queue(target_id)
+    await app.discovery.purge_candidate_everywhere(target_id)
+    await app.redis.delete(f"rewind_last_dislike:{target_id}")
     await message.answer(t(lang, "user_banned"))
     try:
         await message.bot.send_message(target_id, t("en", "banned"))
@@ -285,6 +288,9 @@ async def report_admin_decision(query: CallbackQuery) -> None:
 
     if decision == "ban":
         await app.users.set_banned(int(report["target_id"]), True)
+        await app.discovery.clear_queue(int(report["target_id"]))
+        await app.discovery.purge_candidate_everywhere(int(report["target_id"]))
+        await app.redis.delete(f"rewind_last_dislike:{int(report['target_id'])}")
         await app.reports.set_status(report_id, "banned", query.from_user.id)
         try:
             await query.bot.send_message(int(report["target_id"]), t("en", "banned"))

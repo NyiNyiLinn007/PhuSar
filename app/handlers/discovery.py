@@ -14,7 +14,7 @@ from app.keyboards import (
     report_reason_keyboard,
 )
 from app.locales import gender_label, report_reason_label, t
-from app.utils import distance_between_users_km, is_premium_active, is_profile_complete, text
+from app.utils import distance_between_users_km, escape_html, is_premium_active, is_profile_complete, text
 
 router = Router(name="discovery")
 
@@ -28,10 +28,10 @@ def _candidate_caption(lang: str, profile: dict[str, object], distance_km: float
         location_line += f"\n{t(lang, 'distance_away', km=f'{distance_km:.1f}')}"
 
     return (
-        f"<b>{text(profile.get('full_name') or 'Unknown')}</b>, {text(profile.get('age') or '-')}\n"
+        f"<b>{escape_html(profile.get('full_name') or 'Unknown')}</b>, {text(profile.get('age') or '-')}\n"
         f"{t(lang, 'label_gender')}: {text(gender_label(lang, str(profile.get('gender') or '-')))}\n"
         f"{location_line}\n\n"
-        f"{text(profile.get('bio') or '-')}"
+        f"{escape_html(profile.get('bio') or '-')}"
     )
 
 
@@ -372,6 +372,19 @@ async def report_prompt(query: CallbackQuery) -> None:
 
     app = get_app(query.bot)
     lang = await app.users.get_language(query.from_user.id, app.settings.default_language)
+    reporter = await app.users.get(query.from_user.id)
+    reporter_name = text(reporter["full_name"] if reporter else (query.from_user.full_name or query.from_user.id))
+    admin_alert = (
+        "🚨 Report clicked\n"
+        f"Reporter: {reporter_name} ({query.from_user.id})\n"
+        f"Target ID: {target_id}"
+    )
+    for admin_id in app.settings.admin_ids:
+        try:
+            await query.bot.send_message(admin_id, admin_alert)
+        except TelegramAPIError:
+            continue
+
     await query.message.answer(t(lang, "report_prompt"), reply_markup=report_reason_keyboard(lang, target_id))
     await query.answer()
 
