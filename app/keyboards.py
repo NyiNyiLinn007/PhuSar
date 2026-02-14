@@ -16,6 +16,17 @@ def language_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def language_settings_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=t("my", "lang_name"), callback_data="langset:my"),
+                InlineKeyboardButton(text=t("en", "lang_name"), callback_data="langset:en"),
+            ]
+        ]
+    )
+
+
 def gender_keyboard(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

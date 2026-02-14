@@ -128,6 +128,30 @@ class UserRepository:
             longitude,
         )
 
+    async def update_photo(self, user_id: int, photo_id: str) -> None:
+        await self.db.execute(
+            """
+            UPDATE users
+            SET photo_id = $2,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1;
+            """,
+            user_id,
+            photo_id,
+        )
+
+    async def update_bio(self, user_id: int, bio: str) -> None:
+        await self.db.execute(
+            """
+            UPDATE users
+            SET bio = LEFT($2, 500),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1;
+            """,
+            user_id,
+            bio,
+        )
+
     async def set_premium_until(self, user_id: int, premium_until: datetime | None) -> None:
         is_premium = premium_until is not None and premium_until > now_utc()
         await self.db.execute(

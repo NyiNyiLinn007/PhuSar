@@ -17,3 +17,8 @@ class RegistrationState(StatesGroup):
 class PremiumState(StatesGroup):
     choosing_provider = State()
     awaiting_screenshot = State()
+
+
+class ProfileEditState(StatesGroup):
+    bio = State()
+    photo = State()

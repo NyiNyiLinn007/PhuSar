@@ -12,6 +12,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from redis.asyncio import Redis
 
+from app.bot_commands import setup_default_commands
 from app.config import Settings
 from app.context import AppContext, set_app
 from app.db import Database
@@ -82,6 +83,7 @@ async def _healthcheck(_: web.Request) -> web.Response:
 
 async def _on_startup(app: web.Application) -> None:
     runtime: RuntimeResources = app["runtime"]
+    await setup_default_commands(runtime.bot)
     await runtime.bot.set_webhook(
         url=runtime.settings.webhook_url,
         secret_token=runtime.settings.webhook_secret_token,

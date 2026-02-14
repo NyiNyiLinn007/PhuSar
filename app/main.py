@@ -9,6 +9,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
+from app.bot_commands import setup_default_commands
 from app.config import Settings
 from app.context import AppContext, set_app
 from app.db import Database
@@ -57,6 +58,7 @@ async def run() -> None:
         dp.include_router(router)
 
     try:
+        await setup_default_commands(bot)
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
