@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
@@ -37,33 +35,14 @@ def _candidate_caption(lang: str, profile: dict[str, object], distance_km: float
     )
 
 
-def _username_mention(value: object) -> str | None:
-    if value is None:
-        return None
-    username = str(value).strip().lstrip("@")
-    if not username:
-        return None
-    return f"@{username}"
-
-
-def _missing_username_match_text(lang: str, profile: Mapping[str, object]) -> str:
+def _user_mention(profile: dict[str, object]) -> str:
     display_name = text(profile.get("full_name") or "User")
-    mention = display_name
     raw_user_id = profile.get("user_id")
     try:
         user_id = int(raw_user_id) if raw_user_id is not None else None
     except (TypeError, ValueError):
-        user_id = None
-    if user_id is not None:
-        mention = f'<a href="tg://user?id={user_id}">{display_name}</a>'
-
-    return (
-        f"{t(lang, 'match_no_username')}\n"
-        f"{mention}\n"
-        f"{t(lang, 'label_age')}: {text(profile.get('age') or '-')}\n"
-        f"{t(lang, 'label_location')}: {text(profile.get('location_region') or '-')}, "
-        f"{text(profile.get('township') or '-')}"
-    )
+        return display_name
+    return f'<a href="tg://user?id={user_id}">{display_name}</a>'
 
 
 async def _show_profile_card(
@@ -364,24 +343,12 @@ async def profile_action(query: CallbackQuery) -> None:
         if actor and target:
             actor_lang = actor["language"] or app.settings.default_language
             target_lang = target["language"] or app.settings.default_language
-
-            actor_username = _username_mention(actor["username"])
-            target_username = _username_mention(target["username"])
-
-            if target_username:
-                await query.message.answer(t(actor_lang, "match_username", username=text(target_username)))
-            else:
-                await query.message.answer(_missing_username_match_text(actor_lang, target))
-            if not actor_username:
-                await query.message.answer(t(actor_lang, "set_username_hint"))
+            actor_mention = _user_mention(dict(actor))
+            target_mention = _user_mention(dict(target))
+            await query.message.answer(t(actor_lang, "match", name=target_mention))
 
             try:
-                if actor_username:
-                    await query.bot.send_message(target_id, t(target_lang, "match_username", username=text(actor_username)))
-                else:
-                    await query.bot.send_message(target_id, _missing_username_match_text(target_lang, actor))
-                if not target_username:
-                    await query.bot.send_message(target_id, t(target_lang, "set_username_hint"))
+                await query.bot.send_message(target_id, t(target_lang, "match", name=actor_mention))
             except TelegramAPIError:
                 pass
 
